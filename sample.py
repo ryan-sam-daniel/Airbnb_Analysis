@@ -6,7 +6,9 @@ import mysql.connector
 import plotly.express as px
 from streamlit_folium import folium_static
 import folium
-
+from textblob import TextBlob
+import pickle
+import os
 
 connection = mysql.connector.connect(
         host="localhost",
@@ -128,8 +130,60 @@ with tab1:
         display_info(selected_id)
         review_info(selected_id)
     
-    # Function to display review information
-    
+
+        
+
+
+    def analyze_price_trends():
+        price_query = "SELECT price, first_review FROM most"
+        cursor.execute(price_query)
+        prices = cursor.fetchall()
+        df_prices = pd.DataFrame(prices, columns=['Price', 'Booking_Date'])
+
+        # Clean and convert datetime
+        df_prices['Booking_Date'] = pd.to_datetime(df_prices['Booking_Date'], errors='coerce')
+        # Drop rows with NaT values
+        df_prices = df_prices.dropna(subset=['Booking_Date'])
+
+        # Convert price to float and handle potential conversion issues
+        df_prices['Price'] = pd.to_numeric(df_prices['Price'], errors='coerce')
+        df_prices = df_prices.dropna(subset=['Price'])
+
+        # Group by month and calculate mean price
+        price_trends = df_prices.groupby(df_prices['Booking_Date'].dt.to_period('M'))['Price'].mean() 
+
+        # Convert PeriodIndex to a regular datetime index for plotting
+        price_trends.index = price_trends.index.to_timestamp()
+
+        st.write("### Price Trends Over Time")
+        st.line_chart(price_trends)
+
+        
+    def analyze_reviews():
+        review_query = "SELECT date FROM review"
+        cursor.execute(review_query)
+        reviews = cursor.fetchall()
+        df_reviews = pd.DataFrame(reviews, columns=['Review_Date'])
+
+        # Convert the Review_Date column to datetime
+        df_reviews['Review_Date'] = pd.to_datetime(df_reviews['Review_Date'], errors='coerce')
+        
+        # Drop rows with NaT values in Review_Date
+        df_reviews = df_reviews.dropna(subset=['Review_Date'])
+
+        # Group by month and count the number of reviews
+        review_counts = df_reviews['Review_Date'].groupby(df_reviews['Review_Date'].dt.to_period('M')).count()
+        
+        # Convert to DataFrame and reset index
+        review_counts_df = review_counts.reset_index(name='Review_Count')
+
+        # Ensure 'Review_Date' is treated as a period for the x-axis
+        review_counts_df['Review_Date'] = review_counts_df['Review_Date'].astype(str)
+
+        st.write("### Review Frequency Over Time")
+        st.bar_chart(review_counts_df.set_index('Review_Date')['Review_Count'])
+
+        
 
 
 
@@ -209,6 +263,13 @@ with tab2:
     fig = px.bar(country_listing_counts, x='Country', y='Total_Listings', title='Total Number of Listings by Country')
     fig.update_layout(xaxis_title='Country', yaxis_title='Total Listings')
     st.plotly_chart(fig)
+    
+
+
+
+    analyze_price_trends()
+    analyze_reviews()
+    
 
 
 with tab3:
